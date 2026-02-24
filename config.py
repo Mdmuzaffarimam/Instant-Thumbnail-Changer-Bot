@@ -9,20 +9,20 @@ import random
 # Telegram Channel @CantarellaBots
 #Supoort group @rexbotschat
 # Bot Configuration
-API_TOKEN = os.environ.get("API_TOKEN", "")
+API_TOKEN = os.environ.get("API_TOKEN", "dd6325bea0127b18d4558c5cafb38d12")
 # CantarellaBots
 # Don't Remove Credit
 # Telegram Channel @CantarellaBots
 #Supoort group @rexbotschat
 # MongoDB
-MONGO_URL = os.environ.get("MONGO_URL", "")
+MONGO_URL = os.environ.get("MONGO_URL", "mongodb+srv://mrnoffice692:PsO4VGHI9heKd7WA@cluster0.e7vboom.mongodb.net/?appName=Cluster0")
 DB_NAME = "thumbnail_bot"
 # CantarellaBots
 # Don't Remove Credit
 # Telegram Channel @CantarellaBots
 #Supoort group @rexbotschat
 # Owner/Admin
-OWNER_ID = int(os.environ.get("OWNER_ID", ""))
+OWNER_ID = int(os.environ.get("OWNER_ID", "8512604416"))
 # CantarellaBots
 # Don't Remove Credit
 # Telegram Channel @CantarellaBots
@@ -30,16 +30,16 @@ OWNER_ID = int(os.environ.get("OWNER_ID", ""))
 # UI URLs - Multiple images that rotate randomly
 # Use DIRECT image URLs (https://i.ibb.co/...) not page URLs (https://ibb.co/...)
 START_PICS = [
-    "https://i.ibb.co/0jjgxKM4/changli-wuthering-waves-4k-wallpaper-uhdpaper-com-437-2-b.jpg",
+    "https://i.ibb.co/0jjgxKM4/changli-wuthering-waves-4k-wallpaper-uhdpaper-com-437-2-b.jpg https://files.catbox.moe/cplv64.jpg",
     # Add more direct image URLs here
 ]
 # CantarellaBots
 # Don't Remove Credit
 # Telegram Channel @CantarellaBots
 #Supoort group @rexbotschat
-CHANNEL_URL = os.environ.get("CHANNEL_URL", "https://t.me/cantarellabots")
-DEV_URL = os.environ.get("DEV_URL", "https://t.me/cantarella_wuwa")
-LOG_CHANNEL = int(os.environ.get("LOG_CHANNEL", "0"))  # e.g., -100xxxxxxxxxxxx
+CHANNEL_URL = os.environ.get("CHANNEL_URL", "https://t.me/Mrn_Officialx")
+DEV_URL = os.environ.get("DEV_URL", "https://t.me/mimam_officialx")
+LOG_CHANNEL = int(os.environ.get("LOG_CHANNEL", "-1002338165303"))  # e.g., -100xxxxxxxxxxxx
 # CantarellaBots
 # Don't Remove Credit
 # Telegram Channel @CantarellaBots
