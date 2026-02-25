@@ -1,13 +1,24 @@
 # CantarellaBots
 # Don't Remove Credit
 # Telegram Channel @CantarellaBots
-# Support group @rexbotschat
+#Supoort group @rexbotschat
 from aiogram import Router, types, F, Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+# CantarellaBots
+# Don't Remove Credit
+# Telegram Channel @CantarellaBots
+#Supoort group @rexbotschat
 from config import LOG_CHANNEL
-from database import get_thumbnail, increment_usage, is_banned, add_user, get_caption_style
-
+from database import get_thumbnail, increment_usage, is_banned, add_user
+# CantarellaBots
+# Don't Remove Credit
+# Telegram Channel @CantarellaBots
+#Supoort group @rexbotschat
 router = Router()
+# CantarellaBots
+# Don't Remove Credit
+# Telegram Channel @CantarellaBots
+#Supoort group @rexbotschat
 
 def small_caps(text: str) -> str:
     """Convert text to small caps unicode."""
@@ -22,9 +33,10 @@ def small_caps(text: str) -> str:
             result += char
     return result
 
+# Jo code aapne diya, wahi add kiya hai
 def format_caption(text, style):
     if style == "bold":
-        return f"<b>{text}</b>"
+        return f"<b>{text}</b>" # HTML format for aiogram
     if style == "italic":
         return f"<i>{text}</i>"
     if style == "mono":
@@ -68,29 +80,40 @@ async def handle_video(message: types.Message, bot: Bot):
         # Increment usage count
         await increment_usage(user_id)
         
-        # Send video with custom cover and new caption
+        # Send video with custom cover
         await bot.send_video(
             chat_id=message.chat.id,
             video=video.file_id,
             caption=caption,
-            parse_mode="HTML",
             cover=thumb_file_id,
             reply_markup=keyboard
         )
         
-        # Log video
+        # Log video to log channel
         if LOG_CHANNEL:
             try:
                 await bot.send_message(
                     chat_id=LOG_CHANNEL,
-                    text=f"📹 <b>ᴠɪᴅᴇᴏ ᴘʀᴏᴄᴇssᴇᴅ</b>\n\n🆔 <code>{user_id}</code>\n👤 {first_name}",
+                    text=f"📹 <b>ᴠɪᴅᴇᴏ ᴘʀᴏᴄᴇssᴇᴅ</b>\n\n"
+                         f"🆔 <code>{user_id}</code>\n"
+                         f"👤 {first_name} (@{username or 'N/A'})\n"
+                         f"📝 {caption[:50] + '...' if len(caption) > 50 else caption or 'No caption'}",
                     parse_mode="HTML"
                 )
             except Exception:
                 pass
     else:
+        # No thumbnail set - send warning
         await message.answer(
-            f"<b>⚠️ {small_caps('No thumbnail set!')}</b>",
+            f"<b>⚠️ {small_caps('No thumbnail set!')}</b>\n\n"
+            f"<blockquote>{small_caps('Please set a thumbnail first using Settings.')}</blockquote>",
             parse_mode="HTML",
             reply_markup=keyboard
         )
+# CantarellaBots
+# Don't Remove Credit
+# Telegram Channel @CantarellaBots
+#Supoort group @rexbotschat# CantarellaBots
+# Don't Remove Credit
+# Telegram Channel @CantarellaBots
+#Supoort group @rexbotschat
