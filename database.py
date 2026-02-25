@@ -45,7 +45,24 @@ async def close_db():
 # Don't Remove Credit
 # Telegram Channel @CantarellaBots
 #Supoort group @rexbotschat
-# ==================== USER FUNCTIONS ====================
+# ==================== CAPTION STYLE FUNCTIONS ====================
+
+async def set_caption_style(user_id: int, style: str):
+    """Set user's custom caption style."""
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {"caption_style": style}},
+        upsert=True
+    )
+
+async def get_caption_style(user_id: int) -> str:
+    """Get user's caption style, defaults to 'normal'."""
+    user = await db.users.find_one({"user_id": user_id})
+    if user:
+        return user.get("caption_style", "normal")
+    return "normal"
+
+# ==================== THUMBNAIL FUNCTIONS ====================
 
 async def add_user(user_id: int, username: str = None, first_name: str = None):
     """Add or update a user."""
