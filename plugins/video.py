@@ -1,24 +1,13 @@
 # CantarellaBots
 # Don't Remove Credit
 # Telegram Channel @CantarellaBots
-#Supoort group @rexbotschat
+# Support group @rexbotschat
 from aiogram import Router, types, F, Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-# CantarellaBots
-# Don't Remove Credit
-# Telegram Channel @CantarellaBots
-#Supoort group @rexbotschat
 from config import LOG_CHANNEL
-from database import get_thumbnail, increment_usage, is_banned, add_user
-# CantarellaBots
-# Don't Remove Credit
-# Telegram Channel @CantarellaBots
-#Supoort group @rexbotschat
+from database import get_thumbnail, increment_usage, is_banned, add_user, get_caption_style
+
 router = Router()
-# CantarellaBots
-# Don't Remove Credit
-# Telegram Channel @CantarellaBots
-#Supoort group @rexbotschat
 
 def small_caps(text: str) -> str:
     """Convert text to small caps unicode."""
@@ -32,10 +21,17 @@ def small_caps(text: str) -> str:
         else:
             result += char
     return result
-# CantarellaBots
-# Don't Remove Credit
-# Telegram Channel @CantarellaBots
-#Supoort group @rexbotschat
+
+def format_caption(text, style):
+    if style == "bold":
+        return f"<b>{text}</b>"
+    if style == "italic":
+        return f"<i>{text}</i>"
+    if style == "mono":
+        return f"<code>{text}</code>"
+    if style == "bold_italic":
+        return f"<b><i>{text}</i></b>"
+    return text
 
 @router.message(F.video)
 async def handle_video(message: types.Message, bot: Bot):
@@ -54,8 +50,11 @@ async def handle_video(message: types.Message, bot: Bot):
     
     video = message.video
     
-    # Keep ORIGINAL caption - no modification
-    caption = message.caption or ""
+    # --- Yahan add kiya hai aapka code ---
+    caption_text = message.caption or ""
+    style = await get_caption_style(user_id) # database style call
+    caption = format_caption(caption_text, style) # formatting call
+    # ------------------------------------
     
     # Get user's thumbnail
     thumb_file_id = await get_thumbnail(user_id)
@@ -69,40 +68,29 @@ async def handle_video(message: types.Message, bot: Bot):
         # Increment usage count
         await increment_usage(user_id)
         
-        # Send video with custom cover
+        # Send video with custom cover and new caption
         await bot.send_video(
             chat_id=message.chat.id,
             video=video.file_id,
             caption=caption,
+            parse_mode="HTML",
             cover=thumb_file_id,
             reply_markup=keyboard
         )
         
-        # Log video to log channel
+        # Log video
         if LOG_CHANNEL:
             try:
                 await bot.send_message(
                     chat_id=LOG_CHANNEL,
-                    text=f"📹 <b>ᴠɪᴅᴇᴏ ᴘʀᴏᴄᴇssᴇᴅ</b>\n\n"
-                         f"🆔 <code>{user_id}</code>\n"
-                         f"👤 {first_name} (@{username or 'N/A'})\n"
-                         f"📝 {caption[:50] + '...' if len(caption) > 50 else caption or 'No caption'}",
+                    text=f"📹 <b>ᴠɪᴅᴇᴏ ᴘʀᴏᴄᴇssᴇᴅ</b>\n\n🆔 <code>{user_id}</code>\n👤 {first_name}",
                     parse_mode="HTML"
                 )
             except Exception:
                 pass
     else:
-        # No thumbnail set - send warning
         await message.answer(
-            f"<b>⚠️ {small_caps('No thumbnail set!')}</b>\n\n"
-            f"<blockquote>{small_caps('Please set a thumbnail first using Settings.')}</blockquote>",
+            f"<b>⚠️ {small_caps('No thumbnail set!')}</b>",
             parse_mode="HTML",
             reply_markup=keyboard
         )
-# CantarellaBots
-# Don't Remove Credit
-# Telegram Channel @CantarellaBots
-#Supoort group @rexbotschat# CantarellaBots
-# Don't Remove Credit
-# Telegram Channel @CantarellaBots
-#Supoort group @rexbotschat
