@@ -30,7 +30,7 @@ OWNER_ID = int(os.environ.get("OWNER_ID", "8512604416"))
 # UI URLs - Multiple images that rotate randomly
 # Use DIRECT image URLs (https://i.ibb.co/...) not page URLs (https://ibb.co/...)
 START_PICS = [
-    "https://files.catbox.moe/f3y9md.jpg",
+    "https://files.catbox.moe/f3y9md.jpg https://files.catbox.moe/c78kqq.jpg https://files.catbox.moe/5zea3u.jpg",
     # Add more direct image URLs here
 ]
 # CantarellaBots
@@ -46,7 +46,7 @@ LOG_CHANNEL = int(os.environ.get("LOG_CHANNEL", "-1002338165303"))  # e.g., -100
 #Supoort group @rexbotschat
 
 def get_random_pic() -> str:
-    """Get a random image from START_PICS."https://files.catbox.moe/c78kqq.jpg"https://files.catbox.moe/5zea3u.jpg"
+    """Get a random image from START_PICS."""
     if START_PICS:
         return random.choice(START_PICS)
     return None
