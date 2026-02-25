@@ -1,22 +1,14 @@
-# CantarellaBots
-# Don't Remove Credit
-# Telegram Channel @CantarellaBots
-#Supoort group @rexbotschat
+# CantarellaBots - Integrated Code
 from aiogram import Router, types, F, Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.exceptions import TelegramBadRequest
-# CantarellaBots
-# Don't Remove Credit
-# Telegram Channel @CantarellaBots
-#Supoort group @rexbotschat
+
 from config import CHANNEL_URL, DEV_URL
-from database import get_thumbnail, set_thumbnail, remove_thumbnail, is_banned
-# CantarellaBots
-# Don't Remove Credit
-# Telegram Channel @CantarellaBots
-#Supoort group @rexbotschat
+# database se functions import karna mat bhulna
+from database import get_thumbnail, set_thumbnail, remove_thumbnail, is_banned, set_caption_style
+
 router = Router()
 
 # CantarellaBots
