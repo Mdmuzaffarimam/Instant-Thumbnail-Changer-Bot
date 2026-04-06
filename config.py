@@ -25,7 +25,7 @@ DEV_URL = os.environ.get("DEV_URL", "https://t.me/mimam_officialx")
 LOG_CHANNEL = int(os.environ.get("LOG_CHANNEL", "-1002338165303"))
 
 # ✅ TMDB API Key (get from https://www.themoviedb.org/settings/api)
-TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "")
+TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "2e6744a49a4fb7cc31accf2e067d78ea")
 
 # ✅ Dump Channel ID (channel jahan videos copy honge, e.g. -1001234567890)
 DUMP_CHANNEL = os.environ.get("DUMP_CHANNEL", "")  # e.g. "-1001234567890"
