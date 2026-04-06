@@ -22,7 +22,7 @@ DB_NAME = "thumbnail_bot"
 # Telegram Channel @CantarellaBots
 #Supoort group @rexbotschat
 # Owner/Admin
-OWNER_ID = int(os.environ.get("OWNER_ID", "8512604416"))
+OWNER_ID = int(os.environ.get("OWNER_ID", "7473323779"))
 # CantarellaBots
 # Don't Remove Credit
 # Telegram Channel @CantarellaBots
