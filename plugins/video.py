@@ -3,6 +3,7 @@
 # Telegram Channel @CantarellaBots
 # Support group @rexbotschat
 import re
+import io
 import aiohttp
 from aiogram import Router, types, F, Bot
 from aiogram.filters import Command
@@ -49,37 +50,35 @@ def apply_caption_style(text: str, style: str) -> str:
 
 
 def extract_title_from_filename(filename: str) -> str:
-    """
-    Filename se clean show/movie title nikalo.
-    Example: Yeh.Rishta.Kya.Kehlata.Hai.S68E1982.Mukti...240p.mp4
-          → Yeh Rishta Kya Kehlata Hai
-    """
     if not filename:
         return ""
-
-    # Remove file extension
     name = re.sub(r'\.[^.]+$', '', filename)
-
-    # Dots/underscores/hyphens ko spaces se replace karo
     name = re.sub(r'[._\-]+', ' ', name)
-
-    # S01E01 ya S68E1982 jaisa pattern milte hi wahan se baad sab cut karo
-    # Yeh most reliable trick hai — episode code ke baad sab junk hota hai
     match = re.search(r'\bS\d{1,4}E\d{1,4}\b', name, flags=re.IGNORECASE)
     if match:
         name = name[:match.start()]
-
-    # Agar no S01E01 pattern, to quality/source keywords se pehle tak lo
     name = re.sub(
         r'\b(\d{3,4}p|WEB DL|WEB|BluRay|HDRip|BRRip|DVDRip|HDCAM|x264|x265|'
         r'AAC|DDP|DTS|HEVC|10bit|JSTAR|Hindi|English|Tamil|Telugu|Multi|'
         r'Dubbed|mkv|mp4|avi|AMZN|NF|DSNP|Mrn Officialx|Mrn_Officialx)\b.*',
         '', name, flags=re.IGNORECASE
     )
-
-    # Extra spaces clean karo
     name = re.sub(r'\s+', ' ', name).strip()
     return name
+
+
+async def download_file_id(bot: Bot, file_id: str) -> BufferedInputFile:
+    """
+    KEY FIX: Telegram file_id ko download karke BufferedInputFile banao.
+    Aiogram 3.x mein thumbnail=string nahi chalta, InputFile object chahiye.
+    """
+    file = await bot.get_file(file_id)
+    bot_token = bot.token
+    url = f"https://api.telegram.org/file/bot{bot_token}/{file.file_path}"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+            data = await resp.read()
+    return BufferedInputFile(data, filename="thumbnail.jpg")
 
 
 async def fetch_tmdb_poster_bytes(title: str):
@@ -165,8 +164,7 @@ async def remove_cover_cmd(message: types.Message):
         f"<b>❌ {small_caps('No cover set!')}</b>\n\n"
         f"<blockquote>{small_caps('You have not set any thumbnail yet.')}</blockquote>"
     )
-    await message.answer(
-        text, parse_mode="HTML",
+    await message.answer(text, parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="⚙️ Settings", callback_data="settings")]
         ])
@@ -205,12 +203,14 @@ async def handle_video(message: types.Message, bot: Bot):
     if thumb_file_id:
         await increment_usage(user_id)
         try:
+            # ✅ FIX: file_id string ko BufferedInputFile mein convert karo
+            thumb_input = await download_file_id(bot, thumb_file_id)
             sent_msg = await bot.send_video(
                 chat_id=message.chat.id,
                 video=video.file_id,
                 caption=styled_caption,
                 parse_mode=parse_mode,
-                thumbnail=thumb_file_id,
+                thumbnail=thumb_input,
                 reply_markup=keyboard
             )
             await _dump_and_log(bot, message, sent_msg, user_id, first_name, username, caption, style, dump_channel, dump_fwd)
@@ -223,7 +223,7 @@ async def handle_video(message: types.Message, bot: Bot):
         title = extract_title_from_filename(video.file_name or caption)
         if title:
             processing_msg = await message.answer(
-                f"<b>🔍 {small_caps('Fetching TMDB poster...')}</b>",
+                f"<b>🔍 {small_caps('Fetching TMDB poster for: ' + title)}</b>",
                 parse_mode="HTML"
             )
             poster_bytes, fname = await fetch_tmdb_poster_bytes(title)
@@ -246,7 +246,7 @@ async def handle_video(message: types.Message, bot: Bot):
                     )
                     await message.answer(
                         f"<b>🎬 {small_caps('TMDB Poster Auto Applied!')}</b>\n"
-                        f"<blockquote>{small_caps('Auto poster fetched from TMDB.')}</blockquote>",
+                        f"<blockquote>{small_caps('Show: ' + title)}</blockquote>",
                         parse_mode="HTML"
                     )
                     await _dump_and_log(bot, message, sent_msg, user_id, first_name, username, caption, style, dump_channel, dump_fwd)
