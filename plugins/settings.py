@@ -86,32 +86,33 @@ async def get_settings_text(user_id: int) -> str:
     style      = await get_caption_style(user_id)
 
     return (
-    f"<b>⚙️ {small_caps('Bot Settings')}</b>\n\n"
+    f"<b>⚙️ {small_caps('Video Cover Thumbnail Bot Settings')}</b>\n\n"
 
-    f"<blockquote>🖼 {small_caps('Thumbnail')}: "
-    f"{small_caps('set')} ✅</blockquote>\n" if thumb else
-    f"<blockquote>🖼 {small_caps('Thumbnail')}: "
-    f"{small_caps('not set')} ❌</blockquote>\n"
+    f"│ 🖼 {small_caps('Thumbnail')}: "
+    f"{small_caps('not set')} ❌ 〞〞\n" if not thumb else
+    f"│ 🖼 {small_caps('Thumbnail')}: "
+    f"{small_caps('set')} ✅ 〞〞\n"
 ) + (
-    f"<blockquote>📁 {small_caps('Dump Channel')}: "
-    f"{small_caps('set')} ✅</blockquote>\n" if dump_ch else
-    f"<blockquote>📁 {small_caps('Dump Channel')}: "
-    f"{small_caps('not set')} ❌</blockquote>\n"
+    f"│ 📁 {small_caps('Dump Channel')}: "
+    f"{small_caps('set')} ✅ 〞〞\n" if dump_ch else
+    f"│ 📁 {small_caps('Dump Channel')}: "
+    f"{small_caps('not set')} ❌ 〞〞\n"
 ) + (
-    f"<blockquote>🎬 {small_caps('Auto Poster')}: "
-    f"{small_caps('on')} ✨</blockquote>\n" if auto_post else
-    f"<blockquote>🎬 {small_caps('Auto Poster')}: "
-    f"{small_caps('off')} ❌</blockquote>\n"
+    f"│ 🎬 {small_caps('Auto Poster')}: "
+    f"{small_caps('on')} ✨ 〞〞\n" if auto_post else
+    f"│ 🎬 {small_caps('Auto Poster')}: "
+    f"{small_caps('off')} ❌ 〞〞\n"
 ) + (
-    f"<blockquote>🚀 {small_caps('Dump Fwd')}: "
-    f"{small_caps('on')} 🟢</blockquote>\n" if dump_fwd_v else
-    f"<blockquote>🚀 {small_caps('Dump Fwd')}: "
-    f"{small_caps('off')} 🔴</blockquote>\n"
+    f"│ 🚀 {small_caps('Dump Fwd')}: "
+    f"{small_caps('on')} 🟢 〞〞\n" if dump_fwd_v else
+    f"│ 🚀 {small_caps('Dump Fwd')}: "
+    f"{small_caps('off')} 🔴 〞〞\n"
 ) + (
-    f"<blockquote>✏️ {small_caps('Style')}: "
-    f"{small_caps(style)}</blockquote>\n\n"
+    f"│ ✏️ {small_caps('Style')}: "
+    f"{small_caps(style)} 〞〞\n\n"
+
     f"💡 <i>{small_caps('Send a photo or image url anytime to update cover.')}</i>"
-    )
+)
 
 def get_caption_style_keyboard(current_style: str) -> InlineKeyboardMarkup:
     styles = [
