@@ -13,21 +13,19 @@ from PIL import Image, ImageFilter
 from config import TMDB_API_KEY
 
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
-TMDB_POSTER   = "https://image.tmdb.org/t/p/w780"    # poster  (name/logo) ← PRIMARY
-TMDB_BACKDROP = "https://image.tmdb.org/t/p/w1280"   # backdrop (scene)    ← FALLBACK
+TMDB_POSTER   = "https://image.tmdb.org/t/p/w780"
+TMDB_BACKDROP = "https://image.tmdb.org/t/p/w1280"
 
 COVER_W = 1280
 COVER_H = 720
 
-# ==================== JUNK PREFIX LIST ====================
-# Release group names / channel names that appear before real title
+# ==================== JUNK PREFIX REMOVAL ====================
 
 _JUNK_PREFIX = re.compile(
     r"^(THE\s+PROFESSOR|PROFESSOR|PAHE|YIFY|RARBG|EZTV|FGT|DEFLATE"
     r"|PSA|ION10|ETHD|MkvCinemas|ExtraFlix|HDHub4u|HDHub"
     r"|OTT[_\s]?Downloader[_\s]?Bot|Mrn[_\s]?Officialx"
-    r"|Yamraaj|Pahe|Strange|TamilMV|MoviesVerse|Telly|Bolly"
-    r"|[A-Z]{2,}\d{2,})\s+",  # e.g. "ABC123 Title"
+    r"|Yamraaj|Pahe|Strange|TamilMV|MoviesVerse|Telly|Bolly)\s+",
     re.IGNORECASE
 )
 
@@ -35,14 +33,12 @@ _JUNK_PREFIX = re.compile(
 
 _END_MARKERS = re.compile(
     r"[\.\s_]("
-    r"S\d{1,2}[\s.]?E\d{1,3}"          # S01E01
-    r"|S\d{1,2}(?=\s|$|\.|_)"           # S03 alone (season pack)
-    r"|E\d{2}-\d{2}"                    # E01-08 range
-    r"|COMBINED|COMPLETE|SEASON"
+    r"S\d{1,2}[\s.]?E\d{1,3}|S\d{1,2}(?=\s|$|\.|_)"
+    r"|E\d{2}-\d{2}|COMBINED|COMPLETE|SEASON"
     r"|19\d{2}|20\d{2}"
     r"|480p|720p|1080p|2160p|4[Kk]|240p|360p"
     r"|WEB[.\-]?DL|WEBRip|BluRay|BRRip|BDRip|HDTV"
-    r"|AMZN|NF|ZEE5|JHS|JSTAR|ZWN|OTT|Netflix|DSNP|HULU|ATVP"
+    r"|AMZN|NF|ZEE5|JHS|JSTAR|ZWN|OTT|Netflix|DSNP|HULU|ATVP|SLIV"
     r"|AAC[\d.]*|DDP[\d.]*|DD[\d.]+|DTS|FLAC|MP3|AC3"
     r"|x264|x265|H\.?264|H\.?265|HEVC|AVC|XviD"
     r"|DVDRip|HDRip|CAMRip|DVDScr"
@@ -62,41 +58,72 @@ def _clean_title(title: str) -> str:
     return title.strip()
 
 def parse_title_from_filename(filename: str) -> Tuple[Optional[str], Optional[str], Optional[int], Optional[int]]:
-    """
-    Returns (title, media_type, year, season)
-
-    Examples:
-      THE PROFESSOR The Boys (2022) S03 COMBINED...  → ("The Boys", "tv",    2022, 3)
-      Naagin.S07E30...                               → ("Naagin",   "tv",    None, 7)
-      SUBEDAAR.2026.1080p...                         → ("Subedaar", "movie", 2026, None)
-      Laughter.Chefs.Unlimited.Entertainment.S03E40  → ("Laughter Chefs Unlimited Entertainment", "tv", None, 3)
-    """
     name = os.path.splitext(filename)[0]
-    # Replace dots/underscores with spaces
     name = re.sub(r"[._]", " ", name)
-    # Remove hyphen between words (keep "S01-E08" type intact temporarily)
     name = re.sub(r"\s*-\s*(?=[A-Za-z])", " ", name)
     name = name.strip()
-
-    # Strip known junk prefixes
     name = _JUNK_PREFIX.sub("", name).strip()
 
-    # Detect year
     year_match = re.search(r"[\(\s]*(19\d{2}|20\d{2})[\)\s]", name)
     year = int(year_match.group(1)) if year_match else None
 
-    # Detect SxxExx (episode) or Sxx alone (season pack)
     se_match = re.search(r"\bS(\d{1,2})E(\d{1,3})\b", name, re.IGNORECASE)
     s_only   = re.search(r"\bS(\d{1,2})\b(?!\s*E)", name, re.IGNORECASE) if not se_match else None
     season     = int(se_match.group(1)) if se_match else (int(s_only.group(1)) if s_only else None)
     media_type = "tv" if (se_match or s_only) else "movie"
 
-    # Cut at first end-marker
     match     = _END_MARKERS.search(name)
     raw_title = name[: match.start()].strip() if match else name.strip()
     title     = _clean_title(raw_title)
 
     return title if title else None, media_type, year, season
+
+
+# ==================== TITLE SIMILARITY CHECK ====================
+
+_STOPWORDS = {"the", "a", "an", "of", "in", "on", "at", "to", "and", "or",
+              "is", "are", "was", "were", "be", "been"}
+
+def _normalize(t: str) -> str:
+    return re.sub(r"[^\w\s]", "", t.lower()).strip()
+
+def _sig_words(t: str) -> List[str]:
+    return [w for w in _normalize(t).split() if w not in _STOPWORDS]
+
+def title_matches(searched: str, returned: str) -> bool:
+    """
+    Returns True only if returned title is the same show as searched.
+
+    Rules:
+    - All significant words of searched must appear in returned (in order)
+    - Returned may have up to 2 extra significant words (for subtitles)
+    - This blocks "The Boys" → "The Boys from Brazil" (3 extra sig words)
+    """
+    if _normalize(searched) == _normalize(returned):
+        return True
+
+    s_sig = _sig_words(searched)
+    r_sig = _sig_words(returned)
+
+    if not s_sig:
+        return _normalize(returned).startswith(_normalize(searched))
+
+    # Match all searched sig words in order in returned
+    j = 0
+    for word in s_sig:
+        found = False
+        while j < len(r_sig):
+            if r_sig[j] == word:
+                j += 1
+                found = True
+                break
+            j += 1
+        if not found:
+            return False
+
+    # Allow at most 2 extra significant words in returned
+    extra = len(r_sig) - len(s_sig)
+    return extra <= 2
 
 
 # ==================== TITLE VARIANTS ====================
@@ -129,7 +156,7 @@ def _generate_title_variants(title: str) -> List[str]:
 
 # ==================== TMDB SEARCH ====================
 
-async def _search_single(session, query, mtype, year=None) -> Optional[dict]:
+async def _search_single(session, query: str, mtype: str, year=None) -> Optional[dict]:
     params = {
         "api_key":  TMDB_API_KEY,
         "query":    query,
@@ -148,20 +175,23 @@ async def _search_single(session, query, mtype, year=None) -> Optional[dict]:
                 return None
             data = await resp.json()
             for r in data.get("results", []):
-                if r.get("poster_path") or r.get("backdrop_path"):
-                    r["_media_type"] = mtype
-                    return r
+                if not (r.get("poster_path") or r.get("backdrop_path")):
+                    continue
+                # ── Strict title check ────────────────────────────────
+                returned_name = r.get("name") or r.get("title") or ""
+                if not title_matches(query, returned_name):
+                    continue   # wrong show — skip
+                r["_media_type"] = mtype
+                return r
     except Exception:
         pass
     return None
 
 
-async def _get_season_poster(session, tmdb_id: int, season: int, mtype: str) -> Optional[str]:
-    """Fetch season-specific poster for TV shows."""
+async def _get_season_poster(session, tmdb_id: int, season: int) -> Optional[str]:
     try:
-        url = f"{TMDB_BASE_URL}/tv/{tmdb_id}/season/{season}"
         async with session.get(
-            url,
+            f"{TMDB_BASE_URL}/tv/{tmdb_id}/season/{season}",
             params={"api_key": TMDB_API_KEY, "language": "en-US"},
             timeout=aiohttp.ClientTimeout(total=8)
         ) as resp:
@@ -173,10 +203,8 @@ async def _get_season_poster(session, tmdb_id: int, season: int, mtype: str) -> 
     return None
 
 
-async def search_tmdb(title: str, media_type: str = "tv", year: int = None, season: int = None):
-    """
-    Multi-strategy TMDB search. Returns (result_dict, season_poster_path).
-    """
+async def search_tmdb(title: str, media_type: str = "tv", year: int = None,
+                      season: int = None) -> Tuple[Optional[dict], Optional[str]]:
     if not TMDB_API_KEY:
         return None, None
 
@@ -203,10 +231,9 @@ async def search_tmdb(title: str, media_type: str = "tv", year: int = None, seas
         if not result:
             return None, None
 
-        # For TV shows with known season, try to get season-specific poster
         season_poster = None
         if season and result.get("_media_type") == "tv" and result.get("id"):
-            season_poster = await _get_season_poster(session, result["id"], season, "tv")
+            season_poster = await _get_season_poster(session, result["id"], season)
 
         return result, season_poster
 
@@ -229,25 +256,14 @@ async def _download_image(url: str, save_path: str) -> bool:
 # ==================== IMAGE PROCESSING ====================
 
 def _portrait_to_cover(img_path: str, out_path: str) -> bool:
-    """
-    Convert poster (portrait) to 1280x720 cover:
-    - Blurred+darkened bg fills entire frame
-    - Sharp poster centered, scaled to full height
-    """
     try:
         poster = Image.open(img_path).convert("RGB")
-
-        # Background: stretch + heavy blur + darken
         bg = poster.resize((COVER_W, COVER_H), Image.LANCZOS)
         bg = bg.filter(ImageFilter.GaussianBlur(radius=45))
         bg = bg.point(lambda p: int(p * 0.5))
-
-        # Foreground: poster scaled to COVER_H
         scale = COVER_H / poster.height
         fg_w  = int(poster.width * scale)
         fg    = poster.resize((fg_w, COVER_H), Image.LANCZOS)
-
-        # Center paste
         x = (COVER_W - fg_w) // 2
         bg.paste(fg, (x, 0))
         bg.save(out_path, "JPEG", quality=95)
@@ -257,7 +273,6 @@ def _portrait_to_cover(img_path: str, out_path: str) -> bool:
         return False
 
 def _backdrop_to_cover(img_path: str, out_path: str) -> bool:
-    """Resize backdrop (already ~16:9) to exactly 1280x720."""
     try:
         img = Image.open(img_path).convert("RGB")
         img = img.resize((COVER_W, COVER_H), Image.LANCZOS)
@@ -271,16 +286,6 @@ def _backdrop_to_cover(img_path: str, out_path: str) -> bool:
 # ==================== MAIN ENTRY ====================
 
 async def get_tmdb_poster(filename: str, save_dir: str = "/tmp") -> Tuple[Optional[str], Optional[dict]]:
-    """
-    Full pipeline:
-      1. Parse filename → title, type, year, season
-      2. Search TMDB
-      3. Image priority:
-         a. Season-specific poster (TV shows with S01/S02...)  ← BEST
-         b. Show/Movie poster (has title/name/logo on it)      ← GOOD
-         c. Backdrop (scene image)                             ← FALLBACK
-      4. Resize to 1280x720
-    """
     if not TMDB_API_KEY:
         return None, None
 
@@ -293,11 +298,11 @@ async def get_tmdb_poster(filename: str, save_dir: str = "/tmp") -> Tuple[Option
         return None, None
 
     os.makedirs(save_dir, exist_ok=True)
-    safe      = re.sub(r"[^\w]", "_", title)[:40]
-    raw_path  = os.path.join(save_dir, f"tmdb_raw_{safe}.jpg")
+    safe       = re.sub(r"[^\w]", "_", title)[:40]
+    raw_path   = os.path.join(save_dir, f"tmdb_raw_{safe}.jpg")
     cover_path = os.path.join(save_dir, f"tmdb_cover_{safe}.jpg")
 
-    # Priority 1: Season-specific poster (TV only)
+    # Priority 1: Season-specific poster
     if season_poster:
         ok = await _download_image(f"{TMDB_POSTER}{season_poster}", raw_path)
         if ok:
@@ -307,19 +312,17 @@ async def get_tmdb_poster(filename: str, save_dir: str = "/tmp") -> Tuple[Option
                 return cover_path, result
 
     # Priority 2: Main poster (has show name/logo)
-    poster_path = result.get("poster_path")
-    if poster_path:
-        ok = await _download_image(f"{TMDB_POSTER}{poster_path}", raw_path)
+    if result.get("poster_path"):
+        ok = await _download_image(f"{TMDB_POSTER}{result['poster_path']}", raw_path)
         if ok:
             resized = _portrait_to_cover(raw_path, cover_path)
             if os.path.exists(raw_path): os.remove(raw_path)
             if resized:
                 return cover_path, result
 
-    # Priority 3: Backdrop (scene image, landscape)
-    backdrop_path = result.get("backdrop_path")
-    if backdrop_path:
-        ok = await _download_image(f"{TMDB_BACKDROP}{backdrop_path}", raw_path)
+    # Priority 3: Backdrop fallback
+    if result.get("backdrop_path"):
+        ok = await _download_image(f"{TMDB_BACKDROP}{result['backdrop_path']}", raw_path)
         if ok:
             resized = _backdrop_to_cover(raw_path, cover_path)
             if os.path.exists(raw_path): os.remove(raw_path)
