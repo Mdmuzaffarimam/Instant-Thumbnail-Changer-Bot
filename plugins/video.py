@@ -2,8 +2,7 @@
 # Don't Remove Credit
 # Telegram Channel @CantarellaBots
 # Support group @rexbotschat
-import asyncio
-import subprocess
+
 import os
 from aiogram import Router, types, F, Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -11,15 +10,13 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from config import LOG_CHANNEL
 from database import (
     get_thumbnail, increment_usage, is_banned, add_user,
-    get_caption_style, get_auto_poster, get_dump_fwd, get_dump_channel,
+    get_caption_style, get_dump_channel, get_auto_poster, get_dump_fwd
 )
-from plugins.settings import apply_caption_style
+from plugins.tmdb import get_tmdb_poster
 
 router = Router()
 
-THUMB_DIR = "thumbnails"
-os.makedirs(THUMB_DIR, exist_ok=True)
-
+# ==================== HELPERS ====================
 
 def small_caps(text: str) -> str:
     normal = "abcdefghijklmnopqrstuvwxyz"
@@ -32,169 +29,226 @@ def small_caps(text: str) -> str:
             result += char
     return result
 
+STYLE_MAP = {
+    "normal":     lambda t: t,
+    "bold":       lambda t: f"<b>{t}</b>",
+    "italic":     lambda t: f"<i>{t}</i>",
+    "underline":  lambda t: f"<u>{t}</u>",
+    "bolditalic": lambda t: f"<b><i>{t}</i></b>",
+    "mono":       lambda t: f"<code>{t}</code>",
+}
 
-# ── /extract_cover command ─────────────────────────────────────────────────────
+def apply_caption_style(text: str, style: str) -> str:
+    if not text:
+        return text
+    fn = STYLE_MAP.get(style, STYLE_MAP["bold"])
+    return fn(text)
 
-@router.message(F.text == "/extract_cover")
-async def extract_cover(message: types.Message, bot: Bot):
-    """Reply to a video with /extract_cover to extract its thumbnail."""
-    replied = message.reply_to_message
-
-    if not replied or not (replied.video or replied.document):
-        await message.answer(
-            f"<b>❌ {small_caps('Please reply to a video message with this command to extract its cover.')}</b>",
-            parse_mode="HTML"
-        )
-        return
-
-    media = replied.video or replied.document
-
-    # Check if media has an inline thumbnail
-    if media.thumbnail:
-        thumb_file_id = media.thumbnail.file_id
-        await bot.send_photo(
-            chat_id=message.chat.id,
-            photo=thumb_file_id,
-            caption=(
-                f"<b>✅ {small_caps('Cover extracted successfully!')}</b>\n\n"
-                f"<blockquote>{small_caps('You can send this image to set it as your thumbnail.')}</blockquote>"
-            ),
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="⚙️ Settings", callback_data="settings")]
-            ])
-        )
-        return
-
-    # Fallback: download video and extract frame with ffmpeg
-    status_msg = await message.answer(f"⏳ {small_caps('Extracting cover, please wait...')}", parse_mode="HTML")
-
-    file = await bot.get_file(media.file_id)
-    video_path = os.path.join(THUMB_DIR, f"{message.from_user.id}_video.mp4")
-    thumb_path = os.path.join(THUMB_DIR, f"{message.from_user.id}_extracted.jpg")
-
-    try:
-        await bot.download_file(file.file_path, destination=video_path)
-        proc = await asyncio.create_subprocess_exec(
-            "ffmpeg", "-y", "-i", video_path,
-            "-ss", "00:00:01", "-vframes", "1", thumb_path,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL
-        )
-        await proc.wait()
-
-        if os.path.exists(thumb_path):
-            await status_msg.delete()
-            await bot.send_photo(
-                chat_id=message.chat.id,
-                photo=types.FSInputFile(thumb_path),
-                caption=(
-                    f"<b>✅ {small_caps('Cover extracted successfully!')}</b>\n\n"
-                    f"<blockquote>{small_caps('You can send this image to set it as your thumbnail.')}</blockquote>"
-                ),
-                parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="⚙️ Settings", callback_data="settings")]
-                ])
-            )
-        else:
-            await status_msg.edit_text(f"<b>❌ {small_caps('Failed to extract cover from this video.')}</b>", parse_mode="HTML")
-
-    except Exception as e:
-        await status_msg.edit_text(f"<b>❌ Error: <code>{e}</code></b>", parse_mode="HTML")
-
-    finally:
-        for path in [video_path, thumb_path]:
-            if os.path.exists(path):
-                os.remove(path)
-
-
-# ── Video handler ──────────────────────────────────────────────────────────────
+# ==================== VIDEO HANDLER ====================
 
 @router.message(F.video)
 async def handle_video(message: types.Message, bot: Bot):
-    """Handle incoming video: apply thumbnail, caption style, dump forward."""
     user_id    = message.from_user.id
     username   = message.from_user.username
     first_name = message.from_user.first_name
 
+    # ── Ban check ────────────────────────────────────────────────────
     if await is_banned(user_id):
-        await message.answer(small_caps("You are banned from using this bot."))
-        return
+        return await message.answer(small_caps("You are banned from using this bot."))
 
     await add_user(user_id, username, first_name)
 
-    video        = message.video
-    raw_caption  = message.caption or ""
-    thumb_file_id = await get_thumbnail(user_id)
-    auto_poster  = await get_auto_poster(user_id)
-    dump_fwd     = await get_dump_fwd(user_id)
-    dump_channel = await get_dump_channel(user_id)
-    style        = await get_caption_style(user_id)
+    video       = message.video
+    filename    = video.file_name or ""
+    raw_caption = message.caption or ""
 
-    # Apply caption style if caption exists
+    # ── Caption style ────────────────────────────────────────────────
+    style   = await get_caption_style(user_id)
     caption = apply_caption_style(raw_caption, style) if raw_caption else ""
+
+    # ── Settings ─────────────────────────────────────────────────────
+    auto_post  = await get_auto_poster(user_id)
+    dump_fwd_on = await get_dump_fwd(user_id)
+    dump_ch    = await get_dump_channel(user_id)
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="⚙️ Settings", callback_data="settings")]
     ])
 
-    if not thumb_file_id:
-        await message.answer(
-            f"<b>⚠️ {small_caps('No thumbnail set!')}</b>\n\n"
-            f"<blockquote>{small_caps('Please set a thumbnail first using Settings.')}</blockquote>",
+    # ── If Auto Poster is OFF → just send as-is ───────────────────────
+    if not auto_post:
+        user_thumb = await get_thumbnail(user_id)
+        if not user_thumb:
+            return await message.answer(
+                f"<b>⚠️ {small_caps('No thumbnail set!')}</b>\n\n"
+                f"<blockquote>{small_caps('Please set a thumbnail first using Settings.')}</blockquote>",
+                parse_mode="HTML",
+                reply_markup=keyboard
+            )
+        await increment_usage(user_id)
+        sent = await bot.send_video(
+            chat_id=message.chat.id,
+            video=video.file_id,
+            caption=caption,
             parse_mode="HTML",
+            cover=user_thumb,
             reply_markup=keyboard
         )
+        await _maybe_dump(bot, sent, dump_fwd_on, dump_ch, message.chat.id)
+        await _log(bot, user_id, first_name, username, style, dump_ch, raw_caption, "manual_thumb")
         return
 
-    # Auto Poster OFF → send video without thumbnail
-    if not auto_poster:
+    # ── Auto Poster is ON → try TMDB first ────────────────────────────
+    poster_path = None
+    tmdb_result = None
+    used_source = "manual_thumb"  # for logging
+
+    if filename:
+        poster_path, tmdb_result = await get_tmdb_poster(filename)
+
+    if poster_path and os.path.exists(poster_path):
+        # ── TMDB poster found ─────────────────────────────────────────
+        used_source = "tmdb"
+        try:
+            # Upload poster as photo to get a file_id
+            uploaded = await bot.send_photo(
+                chat_id=message.chat.id,
+                photo=types.FSInputFile(poster_path),
+                disable_notification=True
+            )
+            cover_file_id = uploaded.photo[-1].file_id
+            # Delete the temp upload silently
+            await bot.delete_message(message.chat.id, uploaded.message_id)
+
+            await increment_usage(user_id)
+            sent = await bot.send_video(
+                chat_id=message.chat.id,
+                video=video.file_id,
+                caption=caption,
+                parse_mode="HTML",
+                cover=cover_file_id,
+                reply_markup=keyboard
+            )
+            await _maybe_dump(bot, sent, dump_fwd_on, dump_ch, message.chat.id)
+            await _log(bot, user_id, first_name, username, style, dump_ch, raw_caption, used_source, tmdb_result)
+        except Exception as e:
+            # TMDB upload failed — fall back to manual thumb or notify
+            await _fallback(bot, message, video, caption, keyboard, dump_fwd_on, dump_ch,
+                            user_id, first_name, username, style, raw_caption)
+        finally:
+            if os.path.exists(poster_path):
+                os.remove(poster_path)
+
+    else:
+        # ── TMDB poster NOT found ─────────────────────────────────────
+        user_thumb = await get_thumbnail(user_id)
+
+        if user_thumb:
+            # Use manual thumbnail as fallback
+            used_source = "manual_thumb_fallback"
+            await increment_usage(user_id)
+            sent = await bot.send_video(
+                chat_id=message.chat.id,
+                video=video.file_id,
+                caption=caption,
+                parse_mode="HTML",
+                cover=user_thumb,
+                reply_markup=keyboard
+            )
+            # Notify user TMDB not found
+            await message.answer(
+                f"<b>ℹ️ {small_caps('No TMDB poster found.')}</b>\n"
+                f"<blockquote>{small_caps('Used your saved thumbnail instead.')}</blockquote>",
+                parse_mode="HTML"
+            )
+            await _maybe_dump(bot, sent, dump_fwd_on, dump_ch, message.chat.id)
+            await _log(bot, user_id, first_name, username, style, dump_ch, raw_caption, used_source)
+
+        else:
+            # No TMDB + no manual thumb → copy video directly
+            await bot.send_video(
+                chat_id=message.chat.id,
+                video=video.file_id,
+                caption=caption,
+                parse_mode="HTML",
+                reply_markup=keyboard
+            )
+            await message.answer(
+                f"✅ <i>VIDEO COPIED DIRECTLY TO CHANNEL (NO TMDB POSTER FOUND).</i>",
+                parse_mode="HTML"
+            )
+
+
+# ==================== FALLBACK (TMDB upload failed) ====================
+
+async def _fallback(bot, message, video, caption, keyboard,
+                    dump_fwd_on, dump_ch, user_id, first_name, username, style, raw_caption):
+    user_thumb = await get_thumbnail(user_id)
+    if user_thumb:
+        await increment_usage(user_id)
+        sent = await bot.send_video(
+            chat_id=message.chat.id,
+            video=video.file_id,
+            caption=caption,
+            parse_mode="HTML",
+            cover=user_thumb,
+            reply_markup=keyboard
+        )
+        await _maybe_dump(bot, sent, dump_fwd_on, dump_ch, message.chat.id)
+        await _log(bot, user_id, first_name, username, style, dump_ch, raw_caption, "fallback_manual")
+    else:
         await bot.send_video(
             chat_id=message.chat.id,
             video=video.file_id,
-            caption=caption or raw_caption,
-            parse_mode="HTML" if caption else None,
+            caption=caption,
+            parse_mode="HTML",
             reply_markup=keyboard
         )
-        return
+        await message.answer(
+            "✅ <i>VIDEO COPIED DIRECTLY TO CHANNEL (NO TMDB POSTER FOUND).</i>",
+            parse_mode="HTML"
+        )
 
-    # Send video WITH custom cover
-    await increment_usage(user_id)
 
-    sent = await bot.send_video(
-        chat_id=message.chat.id,
-        video=video.file_id,
-        caption=caption,
-        parse_mode="HTML" if caption else None,
-        cover=thumb_file_id,
-        reply_markup=keyboard
-    )
+# ==================== HELPERS ====================
 
-    # Dump Forward → forward to dump channel if set and enabled
-    if dump_fwd and dump_channel:
+async def _maybe_dump(bot: Bot, sent_msg, dump_fwd_on: bool, dump_ch, chat_id):
+    """Forward sent video to dump channel if enabled."""
+    if dump_fwd_on and dump_ch:
         try:
             await bot.forward_message(
-                chat_id=dump_channel,
-                from_chat_id=message.chat.id,
-                message_id=sent.message_id
-            )
-        except Exception:
-            pass  # Silently fail if forward fails
-
-    # Log to log channel
-    if LOG_CHANNEL:
-        try:
-            short_cap = raw_caption[:50] + "..." if len(raw_caption) > 50 else raw_caption or "No caption"
-            await bot.send_message(
-                chat_id=LOG_CHANNEL,
-                text=(
-                    f"📹 <b>ᴠɪᴅᴇᴏ ᴘʀᴏᴄᴇssᴇᴅ</b>\n\n"
-                    f"🆔 <code>{user_id}</code>\n"
-                    f"👤 {first_name} (@{username or 'N/A'})\n"
-                    f"📝 {short_cap}"
-                ),
-                parse_mode="HTML"
+                chat_id=dump_ch,
+                from_chat_id=chat_id,
+                message_id=sent_msg.message_id
             )
         except Exception:
             pass
+
+
+async def _log(bot: Bot, user_id, first_name, username, style, dump_ch, caption, source, tmdb_result=None):
+    """Send log to LOG_CHANNEL."""
+    if not LOG_CHANNEL:
+        return
+    try:
+        tmdb_info = ""
+        if tmdb_result:
+            title = tmdb_result.get("title") or tmdb_result.get("name") or "N/A"
+            mtype = tmdb_result.get("_media_type", "?").upper()
+            tmdb_info = f"\n🎬 TMDB: {title} [{mtype}]"
+
+        await bot.send_message(
+            chat_id=LOG_CHANNEL,
+            text=(
+                f"📹 <b>ᴠɪᴅᴇᴏ ᴘʀᴏᴄᴇssᴇᴅ</b>\n\n"
+                f"🆔 <code>{user_id}</code>\n"
+                f"👤 {first_name} (@{username or 'N/A'})\n"
+                f"✏️ Style: {style.upper()}\n"
+                f"🖼 Source: {source}\n"
+                f"📁 Dump: {dump_ch or 'Not set'}"
+                f"{tmdb_info}\n"
+                f"📝 {caption[:50] + '...' if len(caption) > 50 else caption or 'No caption'}"
+            ),
+            parse_mode="HTML"
+        )
+    except Exception:
+        pass
