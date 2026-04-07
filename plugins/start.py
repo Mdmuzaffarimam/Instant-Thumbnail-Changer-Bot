@@ -73,14 +73,16 @@ async def start_cmd(message: types.Message, bot: Bot):
     
     # Welcome text in small caps with blockquote
     welcome_text = (
-        f"<b>{small_caps('Welcome to Thumbnail Bot!')}\n\n"
-        f"<blockquote>{small_caps('Send me a video and I will add your custom thumbnail to it.')}</blockquote>\n\n"
-        f"{small_caps('How to use:')}\n"
-        f"<blockquote>"
-        f"1️ {small_caps('Set your thumbnail in Settings')}\n"
-        f"2️ {small_caps('Send any video')}\n"
-        f"3️ {small_caps('Get video with your thumbnail!')}"
-        f"</blockquote></b>"
+    f"<b>{small_caps('Welcome to Video Cover Thumbnail Bot!')}\n\n"
+    f"<blockquote>{small_caps('Send me a video and I will add your custom cover to it.')}</blockquote>\n\n"
+    
+    f"{small_caps('How to use:')}\n"
+    f"<blockquote>"
+    f"● {small_caps('Send any image directly to set it as cover')}\n"
+    f"● {small_caps('Send image URL to set as cover')}\n"
+    f"● {small_caps('Send a video to change its cover (requires cover)')}\n"
+    f"● {small_caps('Turn on auto cover to auto cover (TMDB)!')}"
+    f"</blockquote></b>"
     )
     
     # Buttons
