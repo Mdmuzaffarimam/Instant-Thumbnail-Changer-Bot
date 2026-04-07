@@ -86,13 +86,31 @@ async def get_settings_text(user_id: int) -> str:
     style      = await get_caption_style(user_id)
 
     return (
-        "<b>⚙️ BOT SETTINGS</b>\n\n"
-        f"🖼 THUMBNAIL: {'✅ SET' if thumb else '❌ NOT SET'}\n"
-        f"📁 DUMP CHANNEL: {'✅ SET' if dump_ch else '❌ NOT SET'}\n"
-        f"🎬 AUTO POSTER: {'✨ ON' if auto_post else '❌ OFF'}\n"
-        f"🚀 DUMP FWD: {'🟢 ON' if dump_fwd_v else '🔴 OFF'}\n"
-        f"✏️ STYLE: {style.upper()}\n\n"
-        "💡 <i>SEND A PHOTO OR IMAGE URL ANYTIME TO UPDATE COVER.</i>"
+    f"<b>⚙️ {small_caps('Bot Settings')}</b>\n\n"
+
+    f"<blockquote>🖼 {small_caps('Thumbnail')}: "
+    f"{small_caps('set')} ✅</blockquote>\n" if thumb else
+    f"<blockquote>🖼 {small_caps('Thumbnail')}: "
+    f"{small_caps('not set')} ❌</blockquote>\n"
+) + (
+    f"<blockquote>📁 {small_caps('Dump Channel')}: "
+    f"{small_caps('set')} ✅</blockquote>\n" if dump_ch else
+    f"<blockquote>📁 {small_caps('Dump Channel')}: "
+    f"{small_caps('not set')} ❌</blockquote>\n"
+) + (
+    f"<blockquote>🎬 {small_caps('Auto Poster')}: "
+    f"{small_caps('on')} ✨</blockquote>\n" if auto_post else
+    f"<blockquote>🎬 {small_caps('Auto Poster')}: "
+    f"{small_caps('off')} ❌</blockquote>\n"
+) + (
+    f"<blockquote>🚀 {small_caps('Dump Fwd')}: "
+    f"{small_caps('on')} 🟢</blockquote>\n" if dump_fwd_v else
+    f"<blockquote>🚀 {small_caps('Dump Fwd')}: "
+    f"{small_caps('off')} 🔴</blockquote>\n"
+) + (
+    f"<blockquote>✏️ {small_caps('Style')}: "
+    f"{small_caps(style)}</blockquote>\n\n"
+    f"💡 <i>{small_caps('Send a photo or image url anytime to update cover.')}</i>"
     )
 
 def get_caption_style_keyboard(current_style: str) -> InlineKeyboardMarkup:
