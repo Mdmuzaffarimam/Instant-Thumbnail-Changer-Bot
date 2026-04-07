@@ -302,7 +302,16 @@ async def get_tmdb_poster(filename: str, save_dir: str = "/tmp") -> Tuple[Option
     raw_path   = os.path.join(save_dir, f"tmdb_raw_{safe}.jpg")
     cover_path = os.path.join(save_dir, f"tmdb_cover_{safe}.jpg")
 
-    # Priority 1: Season-specific poster
+    # Priority 1: Backdrop (full 16:9 landscape) ✅
+    if result.get("backdrop_path"):
+        ok = await _download_image(f"{TMDB_BACKDROP}{result['backdrop_path']}", raw_path)
+        if ok:
+            resized = _backdrop_to_cover(raw_path, cover_path)
+            if os.path.exists(raw_path): os.remove(raw_path)
+            if resized:
+                return cover_path, result
+
+    # Priority 2: Season-specific poster (fallback)
     if season_poster:
         ok = await _download_image(f"{TMDB_POSTER}{season_poster}", raw_path)
         if ok:
@@ -311,20 +320,11 @@ async def get_tmdb_poster(filename: str, save_dir: str = "/tmp") -> Tuple[Option
             if resized:
                 return cover_path, result
 
-    # Priority 2: Main poster (has show name/logo)
+    # Priority 3: Main poster (last fallback)
     if result.get("poster_path"):
         ok = await _download_image(f"{TMDB_POSTER}{result['poster_path']}", raw_path)
         if ok:
             resized = _portrait_to_cover(raw_path, cover_path)
-            if os.path.exists(raw_path): os.remove(raw_path)
-            if resized:
-                return cover_path, result
-
-    # Priority 3: Backdrop fallback
-    if result.get("backdrop_path"):
-        ok = await _download_image(f"{TMDB_BACKDROP}{result['backdrop_path']}", raw_path)
-        if ok:
-            resized = _backdrop_to_cover(raw_path, cover_path)
             if os.path.exists(raw_path): os.remove(raw_path)
             if resized:
                 return cover_path, result
