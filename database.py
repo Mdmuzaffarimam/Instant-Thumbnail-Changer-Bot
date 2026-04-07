@@ -6,7 +6,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from typing import Optional, List, Dict, Any
 from config import MONGO_URL, DB_NAME, OWNER_ID
 
-# MongoDB client
+# MongoDB client (initialized in main.py)
 client: AsyncIOMotorClient = None
 db = None
 
@@ -16,10 +16,8 @@ async def init_db():
     global client, db
     client = AsyncIOMotorClient(MONGO_URL)
     db = client[DB_NAME]
-
     await db.users.create_index("user_id", unique=True)
     await db.admins.create_index("user_id", unique=True)
-
     await add_admin(OWNER_ID)
     print("✅ MongoDB connected")
 
@@ -43,10 +41,10 @@ async def add_user(user_id: int, username: str = None, first_name: str = None):
                 "thumbnail_file_id": None,
                 "usage_count": 0,
                 "banned": False,
-                "caption_style": "bold",       # ✅ default style
-                "dump_channel": None,           # ✅ per-user dump channel
-                "dump_fwd": True,               # ✅ dump forward on/off
-                "auto_poster": True,            # ✅ TMDB auto poster on/off
+                "caption_style": "bold",
+                "dump_channel": None,
+                "auto_poster": True,
+                "dump_fwd": True,
             }
         },
         upsert=True
@@ -70,7 +68,8 @@ async def get_user_count() -> int:
 async def set_thumbnail(user_id: int, file_id: str):
     await db.users.update_one(
         {"user_id": user_id},
-        {"$set": {"thumbnail_file_id": file_id}}
+        {"$set": {"thumbnail_file_id": file_id}},
+        upsert=True
     )
 
 
@@ -87,59 +86,71 @@ async def remove_thumbnail(user_id: int) -> bool:
     return result.modified_count > 0
 
 
-# ==================== ✅ CAPTION STYLE ====================
-
-async def set_caption_style(user_id: int, style: str):
-    """Set caption style: normal, bold, italic, underline, bold_italic, mono"""
-    await db.users.update_one(
-        {"user_id": user_id},
-        {"$set": {"caption_style": style}}
-    )
-
+# ==================== CAPTION STYLE FUNCTIONS ====================
 
 async def get_caption_style(user_id: int) -> str:
     user = await db.users.find_one({"user_id": user_id})
     return user.get("caption_style", "bold") if user else "bold"
 
 
-# ==================== ✅ DUMP CHANNEL ====================
-
-async def set_dump_channel(user_id: int, channel_id: str):
+async def set_caption_style(user_id: int, style: str):
     await db.users.update_one(
         {"user_id": user_id},
-        {"$set": {"dump_channel": channel_id}}
+        {"$set": {"caption_style": style}},
+        upsert=True
     )
 
+
+# ==================== DUMP CHANNEL FUNCTIONS ====================
 
 async def get_dump_channel(user_id: int) -> Optional[str]:
     user = await db.users.find_one({"user_id": user_id})
     return user.get("dump_channel") if user else None
 
 
-async def set_dump_fwd(user_id: int, value: bool):
+async def set_dump_channel(user_id: int, channel: str):
     await db.users.update_one(
         {"user_id": user_id},
-        {"$set": {"dump_fwd": value}}
+        {"$set": {"dump_channel": channel}},
+        upsert=True
     )
 
+
+async def remove_dump_channel(user_id: int):
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {"dump_channel": None}}
+    )
+
+
+# ==================== AUTO POSTER FUNCTIONS ====================
+
+async def get_auto_poster(user_id: int) -> bool:
+    user = await db.users.find_one({"user_id": user_id})
+    return user.get("auto_poster", True) if user else True
+
+
+async def set_auto_poster(user_id: int, value: bool):
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {"auto_poster": value}},
+        upsert=True
+    )
+
+
+# ==================== DUMP FWD FUNCTIONS ====================
 
 async def get_dump_fwd(user_id: int) -> bool:
     user = await db.users.find_one({"user_id": user_id})
     return user.get("dump_fwd", True) if user else True
 
 
-# ==================== ✅ AUTO POSTER ====================
-
-async def set_auto_poster(user_id: int, value: bool):
+async def set_dump_fwd(user_id: int, value: bool):
     await db.users.update_one(
         {"user_id": user_id},
-        {"$set": {"auto_poster": value}}
+        {"$set": {"dump_fwd": value}},
+        upsert=True
     )
-
-
-async def get_auto_poster(user_id: int) -> bool:
-    user = await db.users.find_one({"user_id": user_id})
-    return user.get("auto_poster", True) if user else True
 
 
 # ==================== USAGE TRACKING ====================
