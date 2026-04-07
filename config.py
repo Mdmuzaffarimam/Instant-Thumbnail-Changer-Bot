@@ -27,6 +27,12 @@ OWNER_ID = int(os.environ.get("OWNER_ID", "7473323779"))
 # Don't Remove Credit
 # Telegram Channel @CantarellaBots
 #Supoort group @rexbotschat
+# TMDB - https://www.themoviedb.org/settings/api
+TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "2e6744a49a4fb7cc31accf2e067d78ea")
+# CantarellaBots
+# Don't Remove Credit
+# Telegram Channel @CantarellaBots
+#Supoort group @rexbotschat
 # UI URLs - Multiple images that rotate randomly
 # Use DIRECT image URLs (https://i.ibb.co/...) not page URLs (https://ibb.co/...)
 START_PICS = [
