@@ -12,10 +12,10 @@ from PIL import Image, ImageFilter
 
 from config import TMDB_API_KEY
 
-TMDB_BASE_URL = "https://api.themoviedb.org/3"
-TMDB_IMG_BASE = "https://image.tmdb.org/t/p/w500"
+TMDB_BASE_URL    = "https://api.themoviedb.org/3"
+TMDB_BACKDROP    = "https://image.tmdb.org/t/p/w1280"   # 16:9 landscape ← PRIMARY
+TMDB_POSTER      = "https://image.tmdb.org/t/p/w500"    # portrait       ← FALLBACK
 
-# Cover output size — matches standard 16:9 video thumbnail
 COVER_W = 1280
 COVER_H = 720
 
@@ -25,9 +25,9 @@ _END_MARKERS = re.compile(
     r"[\.\s_]("
     r"S\d{1,2}E\d{1,3}"
     r"|19\d{2}|20\d{2}"
-    r"|480p|720p|1080p|2160p|4[Kk]"
-    r"|WEB[.\-]?DL|WEBRip|BluRay|BRRip|BDRip|HDTV|AMZN|NF|ZEE5"
-    r"|SONY|HOTSTAR|VOOT|JIOCINEMA|HULU|DSNP|ATVP"
+    r"|480p|720p|1080p|2160p|4[Kk]|240p|360p"
+    r"|WEB[.\-]?DL|WEBRip|BluRay|BRRip|BDRip|HDTV|AMZN|NF|ZEE5|JHS"
+    r"|SONY|HOTSTAR|VOOT|JIOCINEMA|HULU|DSNP|ATVP|ZWN|OTT"
     r"|AAC[\d.]*|DDP[\d.]*|DD[\d.]+|DTS|FLAC|MP3|AC3"
     r"|x264|x265|H\.?264|H\.?265|HEVC|AVC|XviD"
     r"|DVDRip|HDRip|CAMRip|DVDScr"
@@ -55,12 +55,12 @@ def parse_title_from_filename(filename: str) -> Tuple[Optional[str], Optional[st
     year_match = re.search(r"[\(\s]*(19\d{2}|20\d{2})[\)\s]", name)
     year = int(year_match.group(1)) if year_match else None
 
-    se_match = re.search(r"\bS(\d{1,2})E(\d{1,3})\b", name, re.IGNORECASE)
+    se_match   = re.search(r"\bS(\d{1,2})E(\d{1,3})\b", name, re.IGNORECASE)
     media_type = "tv" if se_match else "movie"
 
-    match = _END_MARKERS.search(name)
+    match     = _END_MARKERS.search(name)
     raw_title = name[: match.start()].strip() if match else name.strip()
-    title = _clean_title(raw_title)
+    title     = _clean_title(raw_title)
 
     return title if title else None, media_type, year
 
@@ -77,72 +77,25 @@ def _generate_title_variants(title: str) -> List[str]:
 
     add(title)
     words = title.split()
-
     for n in range(min(5, len(words) - 1), 1, -1):
         add(" ".join(words[:n]))
 
-    def halve(t):
-        return re.sub(r"(.)\1{2,}", r"\1\1", t)
+    def halve(t):    return re.sub(r"(.)\1{2,}", r"\1\1", t)
+    def dedouble(t): return re.sub(r"(.)\1+",    r"\1",   t)
 
-    def dedouble(t):
-        return re.sub(r"(.)\1+", r"\1", t)
-
-    simp = halve(title)
-    if simp != title:
-        add(simp)
-        for n in range(min(5, len(simp.split()) - 1), 1, -1):
-            add(" ".join(simp.split()[:n]))
-
-    sing = dedouble(title)
-    if sing != title:
-        add(sing)
-        for n in range(min(5, len(sing.split()) - 1), 1, -1):
-            add(" ".join(sing.split()[:n]))
+    for fn in [halve, dedouble]:
+        s = fn(title)
+        if s != title:
+            add(s)
+            for n in range(min(5, len(s.split()) - 1), 1, -1):
+                add(" ".join(s.split()[:n]))
 
     return variants
 
 
-# ==================== POSTER RESIZE → 16:9 ====================
-
-def make_cover_image(poster_path: str, output_path: str) -> bool:
-    """
-    Resize a portrait TMDB poster to 1280x720 (16:9) cover image.
-
-    Layout:
-    - Background: poster stretched to 1280x720 + heavy Gaussian blur
-    - Foreground: poster scaled to fit height (720px), centered
-    - Result: professional cover that fills video thumbnail area
-    """
-    try:
-        poster = Image.open(poster_path).convert("RGB")
-
-        # ── Background: stretch + blur ──────────────────────────────
-        bg = poster.resize((COVER_W, COVER_H), Image.LANCZOS)
-        bg = bg.filter(ImageFilter.GaussianBlur(radius=40))
-
-        # Darken background slightly so foreground stands out
-        bg = bg.point(lambda p: int(p * 0.6))
-
-        # ── Foreground: scale poster to fill height ─────────────────
-        scale  = COVER_H / poster.height
-        fg_w   = int(poster.width * scale)
-        fg_h   = COVER_H
-        fg     = poster.resize((fg_w, fg_h), Image.LANCZOS)
-
-        # ── Paste centered ──────────────────────────────────────────
-        x = (COVER_W - fg_w) // 2
-        bg.paste(fg, (x, 0))
-
-        bg.save(output_path, "JPEG", quality=95)
-        return True
-    except Exception as e:
-        print(f"Cover resize error: {e}")
-        return False
-
-
 # ==================== TMDB SEARCH ====================
 
-async def _search_single(session, query, mtype, year=None):
+async def _search_single(session, query, mtype, year=None) -> Optional[dict]:
     params = {
         "api_key":  TMDB_API_KEY,
         "query":    query,
@@ -152,14 +105,18 @@ async def _search_single(session, query, mtype, year=None):
     if year:
         params["first_air_date_year" if mtype == "tv" else "year"] = year
 
-    url = f"{TMDB_BASE_URL}/search/{mtype}"
     try:
-        async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+        async with session.get(
+            f"{TMDB_BASE_URL}/search/{mtype}",
+            params=params,
+            timeout=aiohttp.ClientTimeout(total=10)
+        ) as resp:
             if resp.status != 200:
                 return None
             data = await resp.json()
             for r in data.get("results", []):
-                if r.get("poster_path"):
+                # Accept result if it has backdrop OR poster
+                if r.get("backdrop_path") or r.get("poster_path"):
                     r["_media_type"] = mtype
                     return r
     except Exception:
@@ -167,12 +124,12 @@ async def _search_single(session, query, mtype, year=None):
     return None
 
 
-async def search_tmdb(title, media_type="tv", year=None):
+async def search_tmdb(title, media_type="tv", year=None) -> Optional[dict]:
     if not TMDB_API_KEY:
         return None
 
-    variants   = _generate_title_variants(title)
-    alt_type   = "movie" if media_type == "tv" else "tv"
+    variants    = _generate_title_variants(title)
+    alt_type    = "movie" if media_type == "tv" else "tv"
     types_order = [media_type, alt_type]
 
     async with aiohttp.ClientSession() as session:
@@ -188,10 +145,9 @@ async def search_tmdb(title, media_type="tv", year=None):
     return None
 
 
-# ==================== POSTER DOWNLOAD ====================
+# ==================== IMAGE DOWNLOAD ====================
 
-async def download_poster(poster_path: str, save_path: str) -> bool:
-    url = f"{TMDB_IMG_BASE}{poster_path}"
+async def _download_image(url: str, save_path: str) -> bool:
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
@@ -204,12 +160,51 @@ async def download_poster(poster_path: str, save_path: str) -> bool:
         return False
 
 
+# ==================== IMAGE PROCESSING ====================
+
+def _resize_backdrop(img_path: str, out_path: str) -> bool:
+    """Backdrop is already ~16:9 — just resize to 1280x720."""
+    try:
+        img = Image.open(img_path).convert("RGB")
+        img = img.resize((COVER_W, COVER_H), Image.LANCZOS)
+        img.save(out_path, "JPEG", quality=95)
+        return True
+    except Exception as e:
+        print(f"Backdrop resize error: {e}")
+        return False
+
+def _portrait_to_cover(img_path: str, out_path: str) -> bool:
+    """
+    Convert portrait poster to 1280x720:
+    Blurred+darkened bg + sharp poster centered.
+    """
+    try:
+        poster = Image.open(img_path).convert("RGB")
+        bg = poster.resize((COVER_W, COVER_H), Image.LANCZOS)
+        bg = bg.filter(ImageFilter.GaussianBlur(radius=40))
+        bg = bg.point(lambda p: int(p * 0.55))
+
+        scale = COVER_H / poster.height
+        fg_w  = int(poster.width * scale)
+        fg    = poster.resize((fg_w, COVER_H), Image.LANCZOS)
+
+        x = (COVER_W - fg_w) // 2
+        bg.paste(fg, (x, 0))
+        bg.save(out_path, "JPEG", quality=95)
+        return True
+    except Exception as e:
+        print(f"Portrait resize error: {e}")
+        return False
+
+
 # ==================== MAIN ENTRY ====================
 
 async def get_tmdb_poster(filename: str, save_dir: str = "/tmp") -> Tuple[Optional[str], Optional[dict]]:
     """
-    Full pipeline: filename → parse → TMDB search → download → resize to 16:9.
-    Returns (cover_path_1280x720, tmdb_result) or (None, None).
+    Full pipeline:
+      filename → parse → TMDB search → 
+      prefer backdrop (16:9) → fallback portrait poster →
+      resize → return cover path
     """
     if not TMDB_API_KEY:
         return None, None
@@ -219,28 +214,36 @@ async def get_tmdb_poster(filename: str, save_dir: str = "/tmp") -> Tuple[Option
         return None, None
 
     result = await search_tmdb(title, media_type, year)
-    if not result or not result.get("poster_path"):
+    if not result:
         return None, None
 
     os.makedirs(save_dir, exist_ok=True)
     safe = re.sub(r"[^\w]", "_", title)[:40]
 
-    # Download original poster
-    raw_path  = os.path.join(save_dir, f"tmdb_raw_{safe}.jpg")
+    backdrop_path = result.get("backdrop_path")
+    poster_path   = result.get("poster_path")
+
+    raw_path   = os.path.join(save_dir, f"tmdb_raw_{safe}.jpg")
     cover_path = os.path.join(save_dir, f"tmdb_cover_{safe}.jpg")
 
-    ok = await download_poster(result["poster_path"], raw_path)
-    if not ok:
-        return None, None
+    # ── Try backdrop first (landscape 16:9) ──────────────────────────
+    if backdrop_path:
+        ok = await _download_image(f"{TMDB_BACKDROP}{backdrop_path}", raw_path)
+        if ok:
+            resized = _resize_backdrop(raw_path, cover_path)
+            if os.path.exists(raw_path):
+                os.remove(raw_path)
+            if resized:
+                return cover_path, result
 
-    # Resize to 16:9 cover
-    resized = make_cover_image(raw_path, cover_path)
+    # ── Fallback: portrait poster with blurred bg ─────────────────────
+    if poster_path:
+        ok = await _download_image(f"{TMDB_POSTER}{poster_path}", raw_path)
+        if ok:
+            resized = _portrait_to_cover(raw_path, cover_path)
+            if os.path.exists(raw_path):
+                os.remove(raw_path)
+            if resized:
+                return cover_path, result
 
-    # Cleanup raw poster
-    if os.path.exists(raw_path):
-        os.remove(raw_path)
-
-    if not resized:
-        return None, None
-
-    return cover_path, result
+    return None, None
